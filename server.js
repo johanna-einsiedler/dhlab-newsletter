@@ -7,7 +7,7 @@ const path = require("path");
 const { google } = require("googleapis");
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-
+const PUBLIC_FORM_URL = process.env.PUBLIC_FORM_URL;
 
 console.log(
   "Service email:",
@@ -180,7 +180,22 @@ async function sendNewsletter(entries) {
 ${itemsHtml}
 
 <hr/>
-<p style="font-size:12px;color:#777;">
+
+<div style="margin-top:28px; font-family: Courier, monospace;">
+<pre style="display:inline-block; text-align:left; font-size:12px; color:#666;">
+------------------------------------------------------------
+SUBMIT SOMETHING INTERESTING?
+
+Seen a call, event, or opportunity worth sharing?
+Add it to the next dispatch:
+
+→ ${PUBLIC_FORM_URL}
+
+------------------------------------------------------------
+</pre>
+</div>
+
+<p style="font-size:12px;color:#777;margin-top:18px;">
 DHLab | Digital Humanities Lab<br/>
 automated digest — ${issueDate}
 </p>
