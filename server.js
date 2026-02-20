@@ -189,8 +189,7 @@ SUBMIT SOMETHING INTERESTING?
 Seen a call, event, or opportunity worth sharing?
 Add it to the next dispatch:
 
-→ ${PUBLIC_FORM_URL}
-
+→ <a href="${PUBLIC_FORM_URL}" style="color:#555;">Fill out the form</a>
 ------------------------------------------------------------
 </pre>
 </div>
