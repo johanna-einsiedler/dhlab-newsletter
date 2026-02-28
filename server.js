@@ -60,7 +60,7 @@ app.use(express.static(path.join(__dirname, "public")));
 async function getUnemailedEntries() {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${SHEET_NAME}!A2:E`,
+    range: `${SHEET_NAME}!A2:F`,
   });
 
   const rows = res.data.values || [];
@@ -69,9 +69,12 @@ async function getUnemailedEntries() {
     .map((r) => ({
       id: r[0],
       url: r[1],
-      event_date: r[2],
+      event_date: r[2] || "",
       created_at: r[3],
       emailed: Number(r[4] || 0),
+      is_rescheduled: Number(r[5] || 0),
+      date_type: r[6] || "",
+      comment: r[7] || "",
     }))
     .filter((r) => r.emailed === 0)
     .sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
@@ -80,7 +83,7 @@ async function getUnemailedEntries() {
 async function markEntriesEmailed(ids) {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${SHEET_NAME}!A2:E`,
+    range: `${SHEET_NAME}!A2:H`,
   });
 
   const rows = res.data.values || [];
@@ -128,23 +131,24 @@ async function sendNewsletter(entries) {
   const issueDate = new Date().toISOString().slice(0, 10);
 
   const itemsHtml = enriched
-    .map(
-      (e) => `
+    .map((e) => {
+      const dateLabel = e.date_type ? e.date_type.toUpperCase() : "DATE";
+      const dateLine = e.event_date
+        ? `<div class="item-date">${e.is_rescheduled ? `<strong>NEW ${dateLabel}: ${e.event_date}</strong>` : `${dateLabel}: ${e.event_date}`}</div>`
+        : "";
+      const descLine = e.description ? `<div class="item-desc">${e.description}</div>` : "";
+      const commentLine = e.comment ? `<div class="item-comment">${e.comment}</div>` : "";
+      return `
       <div class="item">
         <div class="item-title">
           &gt; <a href="${e.url}">${e.title}</a>
         </div>
-        <div class="item-date">
-          DATE: ${e.event_date}
-        </div>
-        ${
-          e.description
-            ? `<div class="item-desc">${e.description}</div>`
-            : ""
-        }
+        ${dateLine}
+        ${descLine}
+        ${commentLine}
       </div>
-    `
-    )
+    `;
+    })
     .join("");
 
   const html = `
@@ -159,6 +163,7 @@ async function sendNewsletter(entries) {
   .item-title a { color:#111; text-decoration:none; font-weight:bold; }
   .item-date { font-size:12px; color:#999; margin:4px 0 6px 0; }
   .item-desc { font-size:13px; color:#444; }
+  .item-comment { font-size:13px; color:#555; font-style:italic; margin-top:4px; }
 </style>
 </head>
 <body>
@@ -266,46 +271,49 @@ cron.schedule("0 9 * * *", () => {
 // ======================
 app.post("/submit", async (req, res) => {
   const url = req.body.url?.trim();
-  const date = req.body.date;
+  const date = req.body.date || "";
+  const date_type = req.body.date_type || "";
+  const comment = req.body.comment?.trim() || "";
 
-  if (!url || !date) {
-    return res.status(400).json({ error: "Missing url or date" });
+  if (!url) {
+    return res.status(400).json({ error: "Missing url" });
   }
 
-  // reject past dates
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const submittedDate = new Date(date);
-  submittedDate.setHours(0, 0, 0, 0);
-
-  if (submittedDate < today) {
-    return res.status(400).json({
-      error: "Date cannot be in the past",
-    });
+  // reject past dates only if a date was provided
+  if (date) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const submittedDate = new Date(date);
+    submittedDate.setHours(0, 0, 0, 0);
+    if (submittedDate < today) {
+      return res.status(400).json({ error: "Date cannot be in the past" });
+    }
   }
 
   try {
     // check duplicates
     const existing = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!B2:B`,
+      range: `${SHEET_NAME}!B2:C`,
     });
 
-    const urls = (existing.data.values || []).flat();
+    const rows = existing.data.values || [];
+    const exactDuplicate = rows.some((r) => r[0] === url && r[1] === date);
 
-    if (urls.includes(url)) {
-      return res.status(409).json({ error: "URL already submitted" });
+    if (exactDuplicate) {
+      return res.status(409).json({ error: "URL already submitted for this date" });
     }
+
+    const isRescheduled = rows.some((r) => r[0] === url) ? 1 : 0;
 
     const id = Date.now().toString();
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A:E`,
+      range: `${SHEET_NAME}!A:F`,
       valueInputOption: "RAW",
       requestBody: {
-        values: [[id, url, date, new Date().toISOString(), 0]],
+        values: [[id, url, date, new Date().toISOString(), 0, isRescheduled, date_type, comment]],
       },
     });
 
@@ -330,6 +338,20 @@ app.get("/admin/entries", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).send("Sheets error");
+  }
+});
+
+// ======================
+// Link preview endpoint
+// ======================
+app.get("/preview", async (req, res) => {
+  const url = req.query.url?.trim();
+  if (!url) return res.status(400).json({ error: "Missing url" });
+  try {
+    const preview = await getLinkPreview(url);
+    res.json({ title: preview.title || url, description: preview.description || "" });
+  } catch {
+    res.json({ title: url, description: "" });
   }
 });
 
