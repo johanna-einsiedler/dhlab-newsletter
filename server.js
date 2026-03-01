@@ -33,15 +33,29 @@ const sheets = google.sheets({ version: "v4", auth });
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
 const SHEET_NAME = "entries";
 
-// simple in-memory last sent tracker (good enough for your scale)
-let lastEmailSent = null;
-
+// ======================
+// Persistent last-sent tracker (Google Sheets config!A1)
+// ======================
 async function getLastEmailSent() {
-  return lastEmailSent;
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: "config!A1",
+    });
+    const val = res.data.values?.[0]?.[0];
+    return val ? new Date(val) : null;
+  } catch {
+    return null;
+  }
 }
 
-function updateLastEmailSent() {
-  lastEmailSent = new Date();
+async function updateLastEmailSent() {
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: "config!A1",
+    valueInputOption: "RAW",
+    requestBody: { values: [[new Date().toISOString()]] },
+  });
 }
 
 // ======================
@@ -248,7 +262,7 @@ async function evaluateAndSend() {
     if (conditionA || conditionB || conditionC) {
       await sendNewsletter(entries);
       await markEntriesEmailed(entries.map((e) => e.id));
-      updateLastEmailSent();
+      await updateLastEmailSent();
       console.log("Newsletter sent.");
     } else {
       console.log("Conditions not met.");
