@@ -169,7 +169,7 @@ Submit it here.
       previewTitle.innerHTML = `&gt; <a href="${url}" style="color:#111;font-weight:bold;text-decoration:none;">${cachedPreview.title || url}</a>`;
 
       if (date) {
-        const label = dateType ? dateType.toUpperCase() : "DATE";
+        const label = dateType || "Date";
         previewDate.textContent = `${label}: ${date}`;
         previewDate.style.display = "";
       } else {

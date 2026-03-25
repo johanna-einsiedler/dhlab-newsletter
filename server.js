@@ -74,7 +74,7 @@ app.use(express.static(path.join(__dirname, "public")));
 async function getUnemailedEntries() {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${SHEET_NAME}!A2:F`,
+    range: `${SHEET_NAME}!A2:H`,
   });
 
   const rows = res.data.values || [];
@@ -146,11 +146,11 @@ async function sendNewsletter(entries) {
 
   const itemsHtml = enriched
     .map((e) => {
-      const dateLabel = e.date_type ? e.date_type.toUpperCase() : "DATE";
+      const dateLabel = e.date_type || "Date";
       const dateLine = e.event_date
-        ? `<div class="item-date">${e.is_rescheduled ? `<strong>NEW ${dateLabel}: ${e.event_date}</strong>` : `${dateLabel}: ${e.event_date}`}</div>`
+        ? `<div class="item-date">${e.is_rescheduled ? `<strong>New ${dateLabel}: ${e.event_date}</strong>` : `${dateLabel}: ${e.event_date}`}</div>`
         : "";
-      const descLine = e.description ? `<div class="item-desc">${e.description}</div>` : "";
+      const descLine = e.description?.trim() ? `<div class="item-desc">${e.description}</div>` : "";
       const commentLine = e.comment ? `<div class="item-comment">${e.comment}</div>` : "";
       return `
       <div class="item">
